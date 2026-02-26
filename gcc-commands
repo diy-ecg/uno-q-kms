@@ -1,0 +1,9 @@
+
+KMS/DRM Beispiel:
+
+gcc kms-min.c -o kms-min $(pkgconfig --cflags --libs libdrm)
+
+OpenGL ES3 Beispiel:
+
+gcc ogl-min-es3.c -o ogl-min-es3 $(pkg-config --cflags --libs libdrm gbm egl glesv2)
+ 
