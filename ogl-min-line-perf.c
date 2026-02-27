@@ -250,6 +250,7 @@ int main(void)
         }
         double t1 = get_seconds();
         glClear(GL_COLOR_BUFFER_BIT);
+        glBufferData(GL_ARRAY_BUFFER, vertex_buffer_size, NULL, GL_STREAM_DRAW); // orphan
         glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_buffer_size, vertex_data);
         glDrawArrays(GL_LINES, 0, total_vertices);
         eglSwapBuffers(gfx.egl_display, gfx.egl_surface);

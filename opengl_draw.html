@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WebGPU 100k Lines</title>
+  <style>
+    html,body { margin:0; height:100%; background:#000; }
+    canvas { width:100%; height:100%; display:block; }
+    #hud { position:fixed; left:10px; top:10px; color:#0f0; font:12px monospace; }
+  </style>
+</head>
+<body>
+  <div id="hud"></div>
+  <canvas id="c"></canvas>
+
+<script type="module">
+const canvas = document.getElementById("c");
+const hud = document.getElementById("hud");
+
+const lineCount = 100_000;
+const verticesPerLine = 2;
+const totalVertices = lineCount * verticesPerLine;
+
+// pro Vertex: x,y,r,g,b,a = 6 floats
+const floatsPerVertex = 6;
+const vertexFloats = totalVertices * floatsPerVertex;
+const vertexBytes  = vertexFloats * 4;
+
+function resizeCanvasToDisplaySize(canvas) {
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const w = Math.floor(canvas.clientWidth  * dpr);
+  const h = Math.floor(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w; canvas.height = h;
+    return true;
+  }
+  return false;
+}
+
+function rand01() { return Math.random(); }
+function randInt(maxExclusive) { return (Math.random() * maxExclusive) | 0; }
+
+function toNdcX(x, w) { return  2.0 * x / (w - 1) - 1.0; }
+function toNdcY(y, h) { return  1.0 - 2.0 * y / (h - 1); }
+
+// --- WebGPU init ---
+if (!navigator.gpu) {
+  hud.textContent = "WebGPU nicht verfügbar (navigator.gpu fehlt).";
+  throw new Error("WebGPU not supported");
+}
+
+const adapter = await navigator.gpu.requestAdapter();
+if (!adapter) throw new Error("No GPU adapter found");
+const device = await adapter.requestDevice();
+
+const context = canvas.getContext("webgpu");
+const format = navigator.gpu.getPreferredCanvasFormat();
+
+function configure() {
+  context.configure({
+    device,
+    format,
+    alphaMode: "opaque",
+  });
+}
+configure();
+
+// Vertex-Layout: location(0)=vec2 position, location(1)=vec4 color
+const vertexBuffer = device.createBuffer({
+  size: vertexBytes,
+  usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+});
+
+// WGSL Shader
+const shader = device.createShaderModule({
+  code: /* wgsl */`
+struct VSIn {
+  @location(0) pos  : vec2f,
+  @location(1) col  : vec4f,
+};
+
+struct VSOut {
+  @builtin(position) Position : vec4f,
+  @location(0) vColor : vec4f,
+};
+
+@vertex
+fn vs_main(input : VSIn) -> VSOut {
+  var out : VSOut;
+  out.Position = vec4f(input.pos, 0.0, 1.0);
+  out.vColor   = input.col;
+  return out;
+}
+
+@fragment
+fn fs_main(@location(0) vColor : vec4f) -> @location(0) vec4f {
+  return vColor;
+}
+`
+});
+
+const pipeline = device.createRenderPipeline({
+  layout: "auto",
+  vertex: {
+    module: shader,
+    entryPoint: "vs_main",
+    buffers: [{
+      arrayStride: floatsPerVertex * 4,
+      attributes: [
+        { shaderLocation: 0, offset: 0,        format: "float32x2" }, // pos
+        { shaderLocation: 1, offset: 2 * 4,    format: "float32x4" }, // color
+      ],
+    }],
+  },
+  fragment: {
+    module: shader,
+    entryPoint: "fs_main",
+    targets: [{ format }],
+  },
+  primitive: {
+    topology: "line-list",
+  },
+});
+
+// CPU-side Vertexdaten (wird pro Frame neu befüllt)
+const vertexData = new Float32Array(vertexFloats);
+
+// optional: einmaliges „Clear und Present“ wie in deinem C-Code
+function clearOnce() {
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginRenderPass({
+    colorAttachments: [{
+      view: context.getCurrentTexture().createView(),
+      clearValue: { r:0, g:0, b:0, a:1 },
+      loadOp: "clear",
+      storeOp: "store",
+    }],
+  });
+  pass.end();
+  device.queue.submit([encoder.finish()]);
+}
+clearOnce();
+
+// Timing
+let lastFpsT = performance.now();
+let frames = 0;
+
+function frame() {
+  const resized = resizeCanvasToDisplaySize(canvas);
+  if (resized) configure();
+
+  const w = canvas.width;
+  const h = canvas.height;
+
+  const t0 = performance.now();
+
+  // 1) Vertexdaten erzeugen (100k random lines)
+  // Format pro Linie: (x0,y0,r,g,b,a) + (x1,y1,r,g,b,a)
+  // wie bei dir: pro Linie gleiche Farbe für beide Endpunkte
+  let base = 0;
+  for (let i = 0; i < lineCount; i++) {
+    const x0 = randInt(w), y0 = randInt(h);
+    const x1 = randInt(w), y1 = randInt(h);
+
+    const fx0 = toNdcX(x0, w);
+    const fy0 = toNdcY(y0, h);
+    const fx1 = toNdcX(x1, w);
+    const fy1 = toNdcY(y1, h);
+
+    const r = rand01();
+    const g = rand01();
+    const b = rand01();
+
+    // v0
+    vertexData[base + 0] = fx0;
+    vertexData[base + 1] = fy0;
+    vertexData[base + 2] = r;
+    vertexData[base + 3] = g;
+    vertexData[base + 4] = b;
+    vertexData[base + 5] = 1.0;
+
+    // v1
+    vertexData[base + 6]  = fx1;
+    vertexData[base + 7]  = fy1;
+    vertexData[base + 8]  = r;
+    vertexData[base + 9]  = g;
+    vertexData[base + 10] = b;
+    vertexData[base + 11] = 1.0;
+
+    base += 12;
+  }
+  const t1 = performance.now();
+
+  // 2) Upload in GPU-Buffer
+  device.queue.writeBuffer(vertexBuffer, 0, vertexData.buffer, vertexData.byteOffset, vertexData.byteLength);
+
+  // 3) Renderpass + Draw
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginRenderPass({
+    colorAttachments: [{
+      view: context.getCurrentTexture().createView(),
+      clearValue: { r:0, g:0, b:0, a:1 },
+      loadOp: "clear",
+      storeOp: "store",
+    }],
+  });
+
+  pass.setPipeline(pipeline);
+  pass.setVertexBuffer(0, vertexBuffer);
+  pass.draw(totalVertices, 1, 0, 0);
+  pass.end();
+
+  device.queue.submit([encoder.finish()]);
+
+  const t2 = performance.now();
+
+  // HUD / ähnlich deinen printf
+  frames++;
+  const now = performance.now();
+  if (now - lastFpsT >= 500) {
+    const fps = (frames * 1000) / (now - lastFpsT);
+    frames = 0;
+    lastFpsT = now;
+
+    hud.textContent =
+      `Create Vert: ${((t1 - t0)/1000).toFixed(6)} sec\n` +
+      `Draw Lines : ${((t2 - t1)/1000).toFixed(6)} sec\n` +
+      `Total Time : ${((t2 - t0)/1000).toFixed(6)} sec\n` +
+      `FPS(est)   : ${fps.toFixed(1)}`;
+  }
+
+  // wie dein sleep(1): „1 Hz Update“ (optional)
+  // Wenn du wirklich nur 1x pro Sekunde neu zeichnen willst:
+  setTimeout(() => requestAnimationFrame(frame), 1000);
+  // requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
