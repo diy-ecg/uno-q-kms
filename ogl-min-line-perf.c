@@ -82,7 +82,6 @@ static GraphicsContext graphics_init(void)
     gfx.gbm_device = gbm_create_device(gfx.drm_fd);
 
     gfx.egl_display = eglGetDisplay((EGLNativeDisplayType)gfx.gbm_device);
-    //gfx.egl_display = eglGetPlatformDisplay(EGL_PLATFORM_GBM_KHR, gfx.gbm_device, 0);
     eglInitialize(gfx.egl_display, 0, 0);
     eglBindAPI(EGL_OPENGL_ES_API);
 
@@ -253,8 +252,10 @@ int main(void)
         glBufferData(GL_ARRAY_BUFFER, vertex_buffer_size, NULL, GL_STREAM_DRAW); // orphan
         glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_buffer_size, vertex_data);
         glDrawArrays(GL_LINES, 0, total_vertices);
+
         eglSwapBuffers(gfx.egl_display, gfx.egl_surface);
         graphics_present(&gfx);
+
         double t2 = get_seconds();
         printf("Create Vert: %.6f sec \n", (t1 - t0));
         printf("Draw Lines : %.6f sec \n", (t2 - t1));
