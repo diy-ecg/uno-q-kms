@@ -146,7 +146,7 @@ int main()
    framebuffer_t fb_t = init_framebuffer();
    srandom(time(NULL));
 
-   const int THREADS = 6;
+   const int THREADS = 5;
    pthread_t threads[THREADS];
    thread_arg_t args[THREADS];
 

@@ -1,0 +1,162 @@
+trying to open device '/dev/dri/card0'... done
+opened device `MSM Snapdragon DRM` on driver `msm` (version 1.12.0 at 0)
+CRTCs:
+id	fb	pos	size
+47	49	(0,0)	(1920x1080)
+  #0 1920x1080 60.00 1920 2008 2052 2200 1080 1084 1089 1125 148500 flags: phsync, pvsync; type: preferred, driver
+  props:
+	24 VRR_ENABLED:
+		flags: range
+		values: 0 1
+		value: 0
+	27 CTM:
+		flags: blob
+		blobs:
+
+		value:
+
+Planes:
+id	crtc	fb	CRTC x,y	x,y	gamma size	possible crtcs
+35	47	49	0,0		0,0	0       	0x000000ff
+  formats: AR24 AB24 RA24 BA24 XR24 RX24 BX24 XB24 AR30 XR30 RG24 BG24 RG16 BG16 AR15 AB15 RA15 BA15 XR15 XB15 RX15 BX15 AR12 AB12 RA12 BA12 XR12 XB12 RX12 BX12
+  props:
+	8 type:
+		flags: immutable enum
+		enums: Overlay=0 Primary=1 Cursor=2
+		value: 1
+	30 IN_FORMATS:
+		flags: immutable blob
+		blobs:
+
+		value:
+			01000000000000001e00000018000000
+			02000000900000004152323441423234
+			52413234424132345852323452583234
+			42583234584232344152333058523330
+			52473234424732345247313642473136
+			41523135414231355241313542413135
+			58523135584231355258313542583135
+			41523132414231325241313242413132
+			58523132584231325258313242583132
+			00000000000000000000000000000000
+			0100000000000005ffffff3f00000000
+			00000000000000000000000000000000
+		in_formats blob decoded:
+			 AR24:  LINEAR(0x0)
+			 AB24:  LINEAR(0x0)
+			 RA24:  LINEAR(0x0)
+			 BA24:  LINEAR(0x0)
+			 XR24:  LINEAR(0x0)
+			 RX24:  LINEAR(0x0)
+			 BX24:  LINEAR(0x0)
+			 XB24:  LINEAR(0x0)
+			 AR30:  LINEAR(0x0)
+			 XR30:  LINEAR(0x0)
+			 RG24:  LINEAR(0x0)
+			 BG24:  LINEAR(0x0)
+			 RG16:  LINEAR(0x0)
+			 BG16:  LINEAR(0x0)
+			 AR15:  LINEAR(0x0)
+			 AB15:  LINEAR(0x0)
+			 RA15:  LINEAR(0x0)
+			 BA15:  LINEAR(0x0)
+			 XR15:  LINEAR(0x0)
+			 XB15:  LINEAR(0x0)
+			 RX15:  LINEAR(0x0)
+			 BX15:  LINEAR(0x0)
+			 AR12:  LINEAR(0x0)
+			 AB12:  LINEAR(0x0)
+			 RA12:  LINEAR(0x0)
+			 BA12:  LINEAR(0x0)
+			 XR12:  LINEAR(0x0)
+			 XB12:  LINEAR(0x0)
+			 RX12:  LINEAR(0x0)
+			 BX12:  LINEAR(0x0)
+	37 zpos:
+		flags: range
+		values: 0 255
+		value: 0
+	38 alpha:
+		flags: range
+		values: 0 65535
+		value: 65535
+	39 pixel blend mode:
+		flags: enum
+		enums: None=2 Pre-multiplied=0 Coverage=1
+		value: 0
+	40 rotation:
+		flags: bitmask
+		values: rotate-0=0x1 rotate-180=0x4 reflect-x=0x10 reflect-y=0x20
+		value: 1
+41	0	0	0,0		0,0	0       	0x000000ff
+  formats: AR24 AB24 RA24 BA24 XR24 RX24 BX24 XB24 AR30 XR30 RG24 BG24 RG16 BG16 AR15 AB15 RA15 BA15 XR15 XB15 RX15 BX15 AR12 AB12 RA12 BA12 XR12 XB12 RX12 BX12
+  props:
+	8 type:
+		flags: immutable enum
+		enums: Overlay=0 Primary=1 Cursor=2
+		value: 0
+	30 IN_FORMATS:
+		flags: immutable blob
+		blobs:
+
+		value:
+			01000000000000001e00000018000000
+			02000000900000004152323441423234
+			52413234424132345852323452583234
+			42583234584232344152333058523330
+			52473234424732345247313642473136
+			41523135414231355241313542413135
+			58523135584231355258313542583135
+			41523132414231325241313242413132
+			58523132584231325258313242583132
+			00000000000000000000000000000000
+			0100000000000005ffffff3f00000000
+			00000000000000000000000000000000
+		in_formats blob decoded:
+			 AR24:  LINEAR(0x0)
+			 AB24:  LINEAR(0x0)
+			 RA24:  LINEAR(0x0)
+			 BA24:  LINEAR(0x0)
+			 XR24:  LINEAR(0x0)
+			 RX24:  LINEAR(0x0)
+			 BX24:  LINEAR(0x0)
+			 XB24:  LINEAR(0x0)
+			 AR30:  LINEAR(0x0)
+			 XR30:  LINEAR(0x0)
+			 RG24:  LINEAR(0x0)
+			 BG24:  LINEAR(0x0)
+			 RG16:  LINEAR(0x0)
+			 BG16:  LINEAR(0x0)
+			 AR15:  LINEAR(0x0)
+			 AB15:  LINEAR(0x0)
+			 RA15:  LINEAR(0x0)
+			 BA15:  LINEAR(0x0)
+			 XR15:  LINEAR(0x0)
+			 XB15:  LINEAR(0x0)
+			 RX15:  LINEAR(0x0)
+			 BX15:  LINEAR(0x0)
+			 AR12:  LINEAR(0x0)
+			 AB12:  LINEAR(0x0)
+			 RA12:  LINEAR(0x0)
+			 BA12:  LINEAR(0x0)
+			 XR12:  LINEAR(0x0)
+			 XB12:  LINEAR(0x0)
+			 RX12:  LINEAR(0x0)
+			 BX12:  LINEAR(0x0)
+	43 zpos:
+		flags: range
+		values: 0 255
+		value: 0
+	44 alpha:
+		flags: range
+		values: 0 65535
+		value: 65535
+	45 pixel blend mode:
+		flags: enum
+		enums: None=2 Pre-multiplied=0 Coverage=1
+		value: 0
+	46 rotation:
+		flags: bitmask
+		values: rotate-0=0x1 rotate-180=0x4 reflect-x=0x10 reflect-y=0x20
+		value: 1
+

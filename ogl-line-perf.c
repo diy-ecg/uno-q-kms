@@ -1,6 +1,5 @@
-// minimal_es3_kms_readable.c
 // Build:
-// gcc ogl-min-line-perf.c -o ogl-min-line-perf 
+// gcc ogl-min-line-perf-pageflip.c -o ogl-min-line-perf-pageflip \
 //         $(pkg-config --cflags --libs egl glesv2 gbm libdrm)
 
 #include <fcntl.h>
@@ -9,6 +8,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdint.h>
+#include <sys/select.h>
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -29,6 +29,15 @@ typedef struct {
     struct gbm_surface *gbm_surface;
     struct gbm_bo *previous_bo;
     uint32_t previous_framebuffer;
+
+    struct gbm_bo *next_bo;
+    uint32_t next_framebuffer;
+
+    uint32_t crtc_id;
+    uint32_t connector_id;
+    int did_modeset;
+
+    volatile int flip_done;
 
     EGLDisplay egl_display;
     EGLConfig  egl_config;
@@ -65,9 +74,45 @@ static GLuint create_program(const char *vs, const char *fs)
     return program;
 }
 
+static void page_flip_handler(int fd, unsigned int frame,
+                              unsigned int sec, unsigned int usec,
+                              void *data)
+{
+    (void)fd; (void)frame; (void)sec; (void)usec;
+    ((GraphicsContext*)data)->flip_done = 1;
+}
+
+static void wait_for_flip(GraphicsContext *gfx)
+{
+    drmEventContext ev = {0};
+    ev.version = DRM_EVENT_CONTEXT_VERSION;
+    ev.page_flip_handler = page_flip_handler;
+
+    while (!gfx->flip_done) {
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(gfx->drm_fd, &fds);
+        select(gfx->drm_fd + 1, &fds, NULL, NULL, NULL);
+        drmHandleEvent(gfx->drm_fd, &ev);
+    }
+    gfx->flip_done = 0;
+}
+
+static uint32_t add_fb(GraphicsContext *gfx, struct gbm_bo *bo)
+{
+    uint32_t fb = 0;
+    drmModeAddFB(gfx->drm_fd,
+                 gfx->screen_width, gfx->screen_height,
+                 24, 32,
+                 gbm_bo_get_stride(bo),
+                 gbm_bo_get_handle(bo).u32,
+                 &fb);
+    return fb;
+}
+
 static GraphicsContext graphics_init(void)
 {
-    GraphicsContext gfx = {0};
+    GraphicsContext gfx = (GraphicsContext){0};
 
     gfx.drm_fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
 
@@ -78,6 +123,9 @@ static GraphicsContext graphics_init(void)
 
     gfx.screen_width  = gfx.mode.hdisplay;
     gfx.screen_height = gfx.mode.vdisplay;
+
+    gfx.crtc_id = gfx.encoder->crtc_id;
+    gfx.connector_id = gfx.connector->connector_id;
 
     gfx.gbm_device = gbm_create_device(gfx.drm_fd);
 
@@ -123,10 +171,7 @@ static GraphicsContext graphics_init(void)
         0
     );
 
-    eglMakeCurrent(gfx.egl_display,
-                   gfx.egl_surface,
-                   gfx.egl_surface,
-                   gfx.egl_context);
+    eglMakeCurrent(gfx.egl_display, gfx.egl_surface, gfx.egl_surface, gfx.egl_context);
 
     const char *vertex_shader_source =
         "#version 300 es\n"
@@ -147,9 +192,7 @@ static GraphicsContext graphics_init(void)
         "fragColor = vColor;"
         "}";
 
-    gfx.shader_program = create_program(vertex_shader_source,
-                                        fragment_shader_source);
-
+    gfx.shader_program = create_program(vertex_shader_source, fragment_shader_source);
     glUseProgram(gfx.shader_program);
 
     glGenVertexArrays(1, &gfx.vertex_array_object);
@@ -165,7 +208,6 @@ static GraphicsContext graphics_init(void)
     glEnableVertexAttribArray(1);
 
     glViewport(0, 0, gfx.screen_width, gfx.screen_height);
-
     eglSwapInterval(gfx.egl_display, 0);
 
     return gfx;
@@ -173,21 +215,31 @@ static GraphicsContext graphics_init(void)
 
 static void graphics_present(GraphicsContext *gfx)
 {
-    struct gbm_bo *new_bo = gbm_surface_lock_front_buffer(gfx->gbm_surface);
+    // lock next scanout buffer (after eglSwapBuffers)
+    gfx->next_bo = gbm_surface_lock_front_buffer(gfx->gbm_surface);
+    gfx->next_framebuffer = add_fb(gfx, gfx->next_bo);
 
-    uint32_t new_fb;
-    drmModeAddFB(gfx->drm_fd, gfx->screen_width, gfx->screen_height,
-                 24, 32, gbm_bo_get_stride(new_bo),gbm_bo_get_handle(new_bo).u32,
-                 &new_fb);
+    if (!gfx->did_modeset) {
+        // first time: do a single modeset
+        drmModeSetCrtc(gfx->drm_fd, gfx->crtc_id, gfx->next_framebuffer, 0, 0,
+                       &gfx->connector_id, 1, &gfx->mode);
+        gfx->did_modeset = 1;
+    } else {
+        // normal path: pageflip + wait for vblank event
+        gfx->flip_done = 0;
+        drmModePageFlip(gfx->drm_fd, gfx->crtc_id, gfx->next_framebuffer,
+                        DRM_MODE_PAGE_FLIP_EVENT, gfx);
+        wait_for_flip(gfx);
+    }
 
-    drmModeSetCrtc(gfx->drm_fd, gfx->encoder->crtc_id, new_fb, 0, 0,
-                   &gfx->connector->connector_id, 1, &gfx->mode);
-
+    // safe now: release previous scanout objects
     if (gfx->previous_framebuffer) drmModeRmFB(gfx->drm_fd, gfx->previous_framebuffer);
     if (gfx->previous_bo) gbm_surface_release_buffer(gfx->gbm_surface, gfx->previous_bo);
 
-    gfx->previous_bo = new_bo;
-    gfx->previous_framebuffer = new_fb;
+    gfx->previous_bo = gfx->next_bo;
+    gfx->previous_framebuffer = gfx->next_framebuffer;
+    gfx->next_bo = NULL;
+    gfx->next_framebuffer = 0;
 }
 
 int main(void)
@@ -200,7 +252,6 @@ int main(void)
     int floats_per_vertex = 6;
 
     size_t vertex_buffer_size = (size_t)total_vertices * (size_t)floats_per_vertex * sizeof(float);
-
     float *vertex_data = malloc(vertex_buffer_size);
 
     glBufferData(GL_ARRAY_BUFFER, vertex_buffer_size, 0, GL_STREAM_DRAW);
@@ -248,26 +299,20 @@ int main(void)
             vertex_data[base + 11] = 1.0f;
         }
         double t1 = get_seconds();
+
         glClear(GL_COLOR_BUFFER_BIT);
         glBufferData(GL_ARRAY_BUFFER, vertex_buffer_size, NULL, GL_STREAM_DRAW); // orphan
         glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_buffer_size, vertex_data);
         glDrawArrays(GL_LINES, 0, total_vertices);
 
         eglSwapBuffers(gfx.egl_display, gfx.egl_surface);
-        double t2 = get_seconds ();
-        graphics_present(&gfx);
-<<<<<<< HEAD
-
         double t2 = get_seconds();
-=======
-        double t3 = get_seconds();
->>>>>>> 70161c8 (lokales Update)
+        graphics_present(&gfx);
+        double t3= get_seconds();
         printf("Create Vert: %.6f sec \n", (t1 - t0));
         printf("Draw Lines : %.6f sec \n", (t2 - t1));
-        printf("Present    : %.6f sec \n", (t3 - t2));
+        printf("Flip Time  : %.6f sec \n", (t3 - t2));
         printf("Total Time : %.6f sec \n \n", (t3 - t0));
         sleep(1);
     }
-
-    return 0;
 }

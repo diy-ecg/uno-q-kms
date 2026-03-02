@@ -1,0 +1,62 @@
+trying to open device '/dev/dri/card0'... done
+opened device `MSM Snapdragon DRM` on driver `msm` (version 1.12.0 at 0)
+Connectors:
+id	encoder	status		name		size (mm)	modes	encoders
+34	33	connected	DP-1           	350x190		15	33
+  modes:
+	index name refresh (Hz) hdisp hss hse htot vdisp vss vse vtot
+  #0 1920x1080 60.00 1920 2008 2052 2200 1080 1084 1089 1125 148500 flags: phsync, pvsync; type: preferred, driver
+  #1 1920x1080 59.94 1920 2008 2052 2200 1080 1084 1089 1125 148352 flags: phsync, pvsync; type: driver
+  #2 1920x1080 50.00 1920 2448 2492 2640 1080 1084 1089 1125 148500 flags: phsync, pvsync; type: driver
+  #3 1920x1080 48.00 1920 2558 2602 2750 1080 1084 1089 1125 148500 flags: phsync, pvsync; type: driver
+  #4 1920x1080 47.95 1920 2558 2602 2750 1080 1084 1089 1125 148352 flags: phsync, pvsync; type: driver
+  #5 1280x720 60.00 1280 1390 1430 1650 720 725 730 750 74250 flags: phsync, pvsync; type: driver
+  #6 1280x720 59.94 1280 1390 1430 1650 720 725 730 750 74176 flags: phsync, pvsync; type: driver
+  #7 1280x720 50.00 1280 1720 1760 1980 720 725 730 750 74250 flags: phsync, pvsync; type: driver
+  #8 1280x720 48.00 1280 2240 2280 2500 720 725 730 750 90000 flags: phsync, pvsync; type: driver
+  #9 1280x720 47.95 1280 2240 2280 2500 720 725 730 750 89910 flags: phsync, pvsync; type: driver
+  #10 720x576 50.00 720 732 796 864 576 581 586 625 27000 flags: nhsync, nvsync; type: driver
+  #11 720x480 60.00 720 736 798 858 480 489 495 525 27027 flags: nhsync, nvsync; type: driver
+  #12 720x480 59.94 720 736 798 858 480 489 495 525 27000 flags: nhsync, nvsync; type: driver
+  #13 640x480 60.00 640 656 752 800 480 490 492 525 25200 flags: nhsync, nvsync; type: driver
+  #14 640x480 59.94 640 656 752 800 480 490 492 525 25175 flags: nhsync, nvsync; type: driver
+  props:
+	1 EDID:
+		flags: immutable blob
+		blobs:
+
+		value:
+			00ffffffffffff004a0c000100000000
+			09210103802313783eee91a3544c9926
+			0f5054200000d1c081c0010101010101
+			010101010101023a801871382d40582c
+			45005ebe1000001e000000fd002f3d1e
+			5311000a202020202020000000fc0052
+			5049204d4f4e3135360a2020000000ff
+			00383130303535393132333500200103
+			02031fc149101f04130201116c6f2309
+			7f0783010000e2004a65030c00100000
+			00000000000000f60000000000000000
+			000000000000000000f6000000000000
+			0000000000000000000000f600000000
+			00000000000000000000000000f60000
+			000000000000000000000000000000f6
+			000000000000000000000000000000e9
+	2 DPMS:
+		flags: enum
+		enums: On=0 Standby=1 Suspend=2 Off=3
+		value: 0
+	5 link-status:
+		flags: enum
+		enums: Good=0 Bad=1
+		value: 0
+	6 non-desktop:
+		flags: immutable range
+		values: 0 1
+		value: 0
+	4 TILE:
+		flags: immutable blob
+		blobs:
+
+		value:
+

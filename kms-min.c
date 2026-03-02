@@ -66,7 +66,7 @@ static inline void put_pixel(framebuffer_t *fb, int x, int y, uint32_t argb)
    uint8_t  *base = (uint8_t *)fb->pixels;
    uint32_t *row  = (uint32_t *)(base + (uint64_t)y * fb->pitch);
    row[x] = argb;
-   //plot_counter++;
+   plot_counter++;
 }
 
 static inline void draw_line(framebuffer_t *fb, int x0, int y0, int x1, int y1, uint32_t argb)
@@ -137,7 +137,7 @@ int main() {
    framebuffer_t fb_t = init_framebuffer();
    srandom(time(NULL));
    while(1){
-      //clear(&fb_t,0xFF000000u);
+      clear(&fb_t,0xFF000000u);
       plot_counter = 0;
 
       double t0 = get_seconds();

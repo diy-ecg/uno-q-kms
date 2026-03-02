@@ -1,6 +1,5 @@
-// minimal_es3_kms_readable.c
 // Build:
-// gcc ogl-min-line-perf.c -o ogl-min-line-perf 
+// gcc ogl-min-line-perf-pageflip.c -o ogl-min-line-perf-pageflip \
 //         $(pkg-config --cflags --libs egl glesv2 gbm libdrm)
 
 #include <fcntl.h>
@@ -9,9 +8,11 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdint.h>
+#include <sys/select.h>
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <drm_fourcc.h>
 #include <gbm.h>
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
@@ -28,7 +29,12 @@ typedef struct {
     struct gbm_device  *gbm_device;
     struct gbm_surface *gbm_surface;
     struct gbm_bo *previous_bo;
-    uint32_t previous_framebuffer;
+
+    uint32_t crtc_id;
+    uint32_t connector_id;
+    int did_modeset;
+
+    volatile int flip_done;
 
     EGLDisplay egl_display;
     EGLConfig  egl_config;
@@ -65,6 +71,73 @@ static GLuint create_program(const char *vs, const char *fs)
     return program;
 }
 
+/* ---------- Pageflip event ---------- */
+
+static void page_flip_handler(int fd, unsigned int frame,
+                              unsigned int sec, unsigned int usec,
+                              void *data)
+{
+    (void)fd; (void)frame; (void)sec; (void)usec;
+    ((GraphicsContext*)data)->flip_done = 1;
+}
+
+static void wait_for_flip(GraphicsContext *gfx)
+{
+    drmEventContext ev = (drmEventContext){0};
+    ev.version = DRM_EVENT_CONTEXT_VERSION;
+    ev.page_flip_handler = page_flip_handler;
+
+    while (!gfx->flip_done) {
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(gfx->drm_fd, &fds);
+        select(gfx->drm_fd + 1, &fds, NULL, NULL, NULL);
+        drmHandleEvent(gfx->drm_fd, &ev);
+    }
+    gfx->flip_done = 0;
+}
+
+/* ---------- FB caching per GBM BO ---------- */
+
+typedef struct {
+    int drm_fd;
+    uint32_t fb_id;
+} FbData;
+
+static void fbdata_destroy(struct gbm_bo *bo, void *data)
+{
+    (void)bo;
+    FbData *d = (FbData*)data;
+    if (d) {
+        if (d->fb_id) drmModeRmFB(d->drm_fd, d->fb_id);
+        free(d);
+    }
+}
+
+static uint32_t get_or_create_fb(GraphicsContext *gfx, struct gbm_bo *bo)
+{
+    FbData *d = (FbData*)gbm_bo_get_user_data(bo);
+    if (d) return d->fb_id;
+
+    d = (FbData*)calloc(1, sizeof(*d));
+    d->drm_fd = gfx->drm_fd;
+
+    uint32_t handles[4] = { gbm_bo_get_handle(bo).u32, 0, 0, 0 };
+    uint32_t strides[4] = { gbm_bo_get_stride(bo), 0, 0, 0 };
+    uint32_t offsets[4] = { 0, 0, 0, 0 };
+
+    int ret = drmModeAddFB2(gfx->drm_fd, gfx->screen_width, gfx->screen_height,
+                            DRM_FORMAT_XRGB8888, handles, strides, offsets,
+                            &d->fb_id, 0);
+    if (ret) {
+        perror("drmModeAddFB2");
+        exit(1);
+    }
+
+    gbm_bo_set_user_data(bo, d, fbdata_destroy);
+    return d->fb_id;
+}
+
 static GraphicsContext graphics_init(void)
 {
     GraphicsContext gfx = {0};
@@ -78,6 +151,9 @@ static GraphicsContext graphics_init(void)
 
     gfx.screen_width  = gfx.mode.hdisplay;
     gfx.screen_height = gfx.mode.vdisplay;
+
+    gfx.crtc_id = gfx.encoder->crtc_id;
+    gfx.connector_id = gfx.connector->connector_id;
 
     gfx.gbm_device = gbm_create_device(gfx.drm_fd);
 
@@ -173,21 +249,31 @@ static GraphicsContext graphics_init(void)
 
 static void graphics_present(GraphicsContext *gfx)
 {
+    // after eglSwapBuffers(): lock next front buffer
+    double a = get_seconds();
     struct gbm_bo *new_bo = gbm_surface_lock_front_buffer(gfx->gbm_surface);
+    double b = get_seconds();
 
-    uint32_t new_fb;
-    drmModeAddFB(gfx->drm_fd, gfx->screen_width, gfx->screen_height,
-                 24, 32, gbm_bo_get_stride(new_bo),gbm_bo_get_handle(new_bo).u32,
-                 &new_fb);
+    uint32_t new_fb = get_or_create_fb(gfx, new_bo);
+    double c = get_seconds();
+    if (!gfx->did_modeset) {
+        drmModeSetCrtc(gfx->drm_fd, gfx->crtc_id, new_fb, 0, 0,
+                       &gfx->connector_id, 1, &gfx->mode);
+        gfx->did_modeset = 1;
+    } else {
+        gfx->flip_done = 0;
+        drmModePageFlip(gfx->drm_fd, gfx->crtc_id, new_fb,
+                        DRM_MODE_PAGE_FLIP_EVENT, gfx);
+        wait_for_flip(gfx);
+    }
+    double d = get_seconds();
 
-    drmModeSetCrtc(gfx->drm_fd, gfx->encoder->crtc_id, new_fb, 0, 0,
-                   &gfx->connector->connector_id, 1, &gfx->mode);
-
-    if (gfx->previous_framebuffer) drmModeRmFB(gfx->drm_fd, gfx->previous_framebuffer);
-    if (gfx->previous_bo) gbm_surface_release_buffer(gfx->gbm_surface, gfx->previous_bo);
+    // now safe: release previous BO (FB is freed when BO is destroyed via user_data callback)
+    if (gfx->previous_bo)
+        gbm_surface_release_buffer(gfx->gbm_surface, gfx->previous_bo);
 
     gfx->previous_bo = new_bo;
-    gfx->previous_framebuffer = new_fb;
+    printf("present breakdown: lock=%.3fms flipwait=%.3fms\n",(b-a)*1000.0, (d-c)*1000.0);
 }
 
 int main(void)
@@ -248,23 +334,19 @@ int main(void)
             vertex_data[base + 11] = 1.0f;
         }
         double t1 = get_seconds();
+
         glClear(GL_COLOR_BUFFER_BIT);
         glBufferData(GL_ARRAY_BUFFER, vertex_buffer_size, NULL, GL_STREAM_DRAW); // orphan
         glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_buffer_size, vertex_data);
-        glDrawArrays(GL_LINES, 0, total_vertices);
+        //glDrawArrays(GL_LINES, 0, total_vertices);
 
         eglSwapBuffers(gfx.egl_display, gfx.egl_surface);
-        double t2 = get_seconds ();
+        double t2 = get_seconds();        
         graphics_present(&gfx);
-<<<<<<< HEAD
-
-        double t2 = get_seconds();
-=======
         double t3 = get_seconds();
->>>>>>> 70161c8 (lokales Update)
         printf("Create Vert: %.6f sec \n", (t1 - t0));
         printf("Draw Lines : %.6f sec \n", (t2 - t1));
-        printf("Present    : %.6f sec \n", (t3 - t2));
+        printf("Flip new   : %.6f sec \n", (t3 - t2));
         printf("Total Time : %.6f sec \n \n", (t3 - t0));
         sleep(1);
     }
